@@ -1,64 +1,68 @@
 import { Injectable } from '@nestjs/common';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
-import { Task } from './entities/task.entity';
+import { Task, PrismaClient, TaskStatus } from '@prisma/client';
 
 @Injectable()
 export class TaskService {
-  private tasks: Task[] = [];
-  private idCounter = 1;
+  constructor(private prisma: PrismaClient) {}
 
-  create(createTaskDto: CreateTaskDto) {
-    const {
-      title,
-      description,
-      status,
-      dueDate,
-      assignedToUserId,
-      assignedToUserName,
-      assignedDate,  
-    } = createTaskDto;
-
-    const newTask: Task = {
-      id: this.idCounter++,
-      title,
-      description,
-      status: status || 'pending',
-      dueDate: dueDate ? new Date(dueDate) : null,
-      assignedDate: assignedDate ? new Date(assignedDate) : new Date(),  // <-- FIXED
-      assignedToUserId,
-      assignedToUserName,
-    };
-
-    this.tasks.push(newTask);
-    return newTask;
+  // Create a new task
+  async create(createTaskDto: CreateTaskDto): Promise<Task> {
+    return this.prisma.task.create({
+      data: {
+        title: createTaskDto.title,
+        description: createTaskDto.description,
+        status: TaskStatus.pending,
+        assignedDate: createTaskDto.assignedDate || new Date(),
+        dueDate: createTaskDto.dueDate ? new Date(createTaskDto.dueDate) : null,
+        assignedToUserId: createTaskDto.assignedToUserId,
+        assignedToUserName: createTaskDto.assignedToUserName,
+      },
+    });
   }
 
-  findAll() {
-    return this.tasks;
+  // Get all tasks
+  async findAll(): Promise<Task[]> {
+    return this.prisma.task.findMany();
   }
 
-  findOne(id: number) {
-    return this.tasks.find((task) => task.id === id);
+  // Get a single task by ID
+  async findOne(id: number): Promise<Task | null> {
+    return this.prisma.task.findUnique({
+      where: { id: id },
+    });
   }
 
-  update(id: number, updateTaskDto: UpdateTaskDto) {
-    const task = this.tasks.find((task) => task.id === id);
+  // Update a task by ID
+  async update(id: number, updateTaskDto: UpdateTaskDto): Promise<Task | { message: string }> {
+    const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) {
       return { message: 'Task not found' };
     }
 
-    Object.assign(task, updateTaskDto);
-    return task;
+    return this.prisma.task.update({
+      where: { id },
+      data: {
+        title: updateTaskDto.title ?? task.title,
+        description: updateTaskDto.description ?? task.description,
+        status: TaskStatus.pending,
+        assignedDate: new Date(),
+        dueDate: updateTaskDto.dueDate ? new Date(updateTaskDto.dueDate) : task.dueDate,
+        assignedToUserId: updateTaskDto.assignedToUserId ?? task.assignedToUserId,
+        assignedToUserName: updateTaskDto.assignedToUserName ?? task.assignedToUserName,
+      },
+    });
   }
 
-  remove(id: number) {
-    const task = this.tasks.find((task) => task.id === id);
+  // Delete a task by ID
+  async remove(id: number): Promise<{ message: string }> {
+    const task = await this.prisma.task.findUnique({ where: { id } });
     if (!task) {
       return { message: 'Task not found' };
     }
 
-    this.tasks = this.tasks.filter((task) => task.id !== id);
+    await this.prisma.task.delete({ where: { id } });
     return { message: 'Task deleted successfully' };
   }
 }
